@@ -33,8 +33,13 @@ const AssessmentLevel1 = () => {
   });
   
   // Adapt the DB responses to our component types
-  const responses = dbResponses ? adaptControlResponses(dbResponses) : undefined;
-  const scopingDecisions = dbScopingDecisions ? adaptScopingDecisions(dbScopingDecisions) : undefined;
+  // Use type casting to handle the conversion safely
+  const responseArray = dbResponses && Array.isArray(dbResponses) ? dbResponses : [];
+  const scopingArray = dbScopingDecisions && Array.isArray(dbScopingDecisions) ? dbScopingDecisions : [];
+  
+  // Now convert the arrays
+  const responses = adaptControlResponses(responseArray);
+  const scopingDecisions = adaptScopingDecisions(scopingArray);
 
   const { data: stats, isLoading: isLoadingStats } = useQuery({
     queryKey: ["/api/assessments/1/calculate-completion"],
