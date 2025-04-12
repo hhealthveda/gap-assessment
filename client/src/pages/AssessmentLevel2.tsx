@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import DomainAccordion from "@/components/DomainAccordion";
 import ProgressSummary from "@/components/ProgressSummary";
+import SprsScoreCard from "@/components/SprsScoreCard";
 import { cmmcLevel2Controls } from "@/data/cmmc-data";
 import type { Assessment } from "@shared/schema";
 import { 
@@ -143,6 +144,15 @@ const AssessmentLevel2 = () => {
                 isLoading={isLoading}
                 stats={stats}
               />
+              
+              {/* SPRS Score Card */}
+              <div className="mt-6">
+                <h3 className="text-base font-medium text-slate-900 mb-4">SPRS Assessment</h3>
+                <SprsScoreCard 
+                  assessmentId={2}
+                  isLoading={isLoading}
+                />
+              </div>
             </div>
           )}
 

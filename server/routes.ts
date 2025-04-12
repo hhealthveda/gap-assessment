@@ -296,6 +296,85 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // API endpoint for SPRS score calculation (Level 2 only)
+  app.get("/api/assessments/:assessmentId/sprs-score", async (req: Request, res: Response) => {
+    try {
+      const assessmentId = Number(req.params.assessmentId);
+      
+      // Get assessment to determine level
+      const assessment = await storage.getAssessment(assessmentId);
+      if (!assessment) {
+        return res.status(404).json({ message: "Assessment not found" });
+      }
+      
+      // Only calculate SPRS for Level 2 assessments
+      if (assessment.level !== "level2") {
+        return res.status(400).json({ 
+          message: "SPRS scoring is only available for CMMC Level 2 assessments"
+        });
+      }
+      
+      // Get all responses for this assessment
+      const responses = await storage.getControlResponses(assessmentId);
+      
+      // Get all scoping decisions
+      const scopingDecisions = await storage.getScopingDecisions(assessmentId);
+      
+      // Count totals for SPRS calculation
+      const totalControls = 110; // Level 2 has 110 practices
+      const inScopeControls = totalControls - scopingDecisions.filter(d => !d.applicable).length;
+      
+      // Count compliant, partial, and non-compliant controls
+      const compliantControls = responses.filter(r => r.status === "yes").length;
+      const partialControls = responses.filter(r => r.status === "partial").length;
+      const nonCompliantControls = responses.filter(r => r.status === "no").length;
+      
+      // Calculate raw score and implementation percentage
+      const rawScore = compliantControls + (partialControls * 0.5);
+      const implementationPercentage = inScopeControls > 0 
+        ? Math.round((rawScore / inScopeControls) * 100)
+        : 0;
+      
+      // Determine implementation level and factor
+      let implementationLevel = "Not Scored (0 practices)";
+      if (rawScore >= 110) implementationLevel = "Level 2 (110+ practices)";
+      else if (rawScore >= 100) implementationLevel = "Level 2 (100-109 practices)";
+      else if (rawScore >= 80) implementationLevel = "Level 2 (80-99 practices)";
+      else if (rawScore >= 60) implementationLevel = "Level 1 (60-79 practices)";
+      else if (rawScore >= 1) implementationLevel = "Level 1 (1-59 practices)";
+      
+      let implementationFactor = "0.0";
+      if (implementationPercentage >= 100) implementationFactor = "1.0";
+      else if (implementationPercentage >= 95) implementationFactor = "0.95";
+      else if (implementationPercentage >= 90) implementationFactor = "0.9";
+      else if (implementationPercentage >= 85) implementationFactor = "0.85";
+      else if (implementationPercentage >= 80) implementationFactor = "0.8";
+      else if (implementationPercentage >= 75) implementationFactor = "0.75";
+      else if (implementationPercentage >= 70) implementationFactor = "0.7";
+      else if (implementationPercentage >= 65) implementationFactor = "0.65";
+      else if (implementationPercentage >= 60) implementationFactor = "0.6";
+      else if (implementationPercentage >= 50) implementationFactor = "0.5";
+      else if (implementationPercentage >= 40) implementationFactor = "0.4";
+      else if (implementationPercentage >= 30) implementationFactor = "0.3";
+      else if (implementationPercentage >= 20) implementationFactor = "0.2";
+      else if (implementationPercentage >= 10) implementationFactor = "0.1";
+      
+      res.json({
+        sprsScore: Math.round(rawScore),
+        totalControls,
+        inScopeControls,
+        compliantControls,
+        partialControls,
+        nonCompliantControls,
+        implementationPercentage,
+        implementationLevel,
+        implementationFactor
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to calculate SPRS score" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
