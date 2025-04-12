@@ -9,7 +9,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import DomainAccordion from "@/components/DomainAccordion";
 import ProgressSummary from "@/components/ProgressSummary";
 import { cmmcLevel1Controls } from "@/data/cmmc-data";
-import type { Assessment, ControlResponse, ScopingDecision } from "@shared/schema";
+import type { Assessment } from "@shared/schema";
+import { 
+  adaptControlResponses, 
+  adaptScopingDecisions,
+  type Response,
+  type ScopingDecision
+} from "@/lib/typeAdapters";
 
 const AssessmentLevel1 = () => {
   const [activeTab, setActiveTab] = useState<string>("assessment");
@@ -18,13 +24,17 @@ const AssessmentLevel1 = () => {
     queryKey: ["/api/assessments/1"],
   });
 
-  const { data: responses, isLoading: isLoadingResponses } = useQuery<ControlResponse[]>({
+  const { data: dbResponses, isLoading: isLoadingResponses } = useQuery({
     queryKey: ["/api/assessments/1/responses"],
   });
 
-  const { data: scopingDecisions, isLoading: isLoadingScopingDecisions } = useQuery<ScopingDecision[]>({
+  const { data: dbScopingDecisions, isLoading: isLoadingScopingDecisions } = useQuery({
     queryKey: ["/api/assessments/1/scoping"],
   });
+  
+  // Adapt the DB responses to our component types
+  const responses = dbResponses ? adaptControlResponses(dbResponses) : undefined;
+  const scopingDecisions = dbScopingDecisions ? adaptScopingDecisions(dbScopingDecisions) : undefined;
 
   const { data: stats, isLoading: isLoadingStats } = useQuery({
     queryKey: ["/api/assessments/1/calculate-completion"],

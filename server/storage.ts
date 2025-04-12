@@ -5,6 +5,8 @@ import {
   activityLogs, type ActivityLog, type InsertActivityLog,
   scopingDecisions, type ScopingDecision, type InsertScopingDecision
 } from "@shared/schema";
+import { db } from "./db";
+import { eq, desc, and } from "drizzle-orm";
 
 export interface IStorage {
   // User methods
@@ -36,236 +38,213 @@ export interface IStorage {
   updateScopingDecision(id: number, decision: Partial<InsertScopingDecision>): Promise<ScopingDecision | undefined>;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<number, User>;
-  private assessments: Map<number, Assessment>;
-  private controlResponses: Map<number, ControlResponse>;
-  private activityLogs: Map<number, ActivityLog>;
-  private scopingDecisions: Map<number, ScopingDecision>;
-  private userId: number;
-  private assessmentId: number;
-  private responseId: number;
-  private logId: number;
-  private scopingId: number;
-
-  constructor() {
-    this.users = new Map();
-    this.assessments = new Map();
-    this.controlResponses = new Map();
-    this.activityLogs = new Map();
-    this.scopingDecisions = new Map();
-    this.userId = 1;
-    this.assessmentId = 1;
-    this.responseId = 1;
-    this.logId = 1;
-    this.scopingId = 1;
-
-    // Initialize with sample data
-    this.createUser({ username: "admin", password: "password" });
-    this.createAssessment({
-      name: "CMMC Initial Assessment",
-      level: "level1",
-      organizationName: "Acme Inc."
-    });
-    this.createAssessment({
-      name: "CMMC Level 2 Assessment",
-      level: "level2",
-      organizationName: "Acme Inc."
-    });
-  }
-
-  // User methods
+export class DatabaseStorage implements IStorage {
   async getUser(id: number): Promise<User | undefined> {
-    return this.users.get(id);
-  }
-
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
-  }
-
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const id = this.userId++;
-    const user: User = { ...insertUser, id };
-    this.users.set(id, user);
+    const [user] = await db.select().from(users).where(eq(users.id, id));
     return user;
   }
 
-  // Assessment methods
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user;
+  }
+
+  async createUser(insertUser: InsertUser): Promise<User> {
+    const [user] = await db
+      .insert(users)
+      .values(insertUser)
+      .returning();
+    return user;
+  }
+
   async getAssessments(): Promise<Assessment[]> {
-    return Array.from(this.assessments.values());
+    return await db.select().from(assessments);
   }
 
   async getAssessment(id: number): Promise<Assessment | undefined> {
-    return this.assessments.get(id);
+    const [assessment] = await db.select().from(assessments).where(eq(assessments.id, id));
+    return assessment;
   }
 
   async createAssessment(insertAssessment: InsertAssessment): Promise<Assessment> {
-    const id = this.assessmentId++;
-    const now = new Date();
-    const assessment: Assessment = {
-      ...insertAssessment,
-      id,
-      createdAt: now,
-      updatedAt: now,
-      completedPercentage: 0
-    };
-    this.assessments.set(id, assessment);
+    const [assessment] = await db
+      .insert(assessments)
+      .values(insertAssessment)
+      .returning();
     return assessment;
   }
 
   async updateAssessment(id: number, assessmentUpdate: Partial<InsertAssessment>): Promise<Assessment | undefined> {
-    const assessment = this.assessments.get(id);
-    if (!assessment) return undefined;
-
-    const updatedAssessment: Assessment = {
-      ...assessment,
-      ...assessmentUpdate,
-      updatedAt: new Date()
-    };
-    this.assessments.set(id, updatedAssessment);
-    return updatedAssessment;
+    const [updated] = await db
+      .update(assessments)
+      .set({
+        ...assessmentUpdate,
+        updatedAt: new Date(),
+      })
+      .where(eq(assessments.id, id))
+      .returning();
+    return updated;
   }
 
   async updateAssessmentCompletionPercentage(id: number, percentage: number): Promise<Assessment | undefined> {
-    const assessment = this.assessments.get(id);
-    if (!assessment) return undefined;
-
-    const updatedAssessment: Assessment = {
-      ...assessment,
-      completedPercentage: percentage,
-      updatedAt: new Date()
-    };
-    this.assessments.set(id, updatedAssessment);
-    return updatedAssessment;
+    const [updated] = await db
+      .update(assessments)
+      .set({
+        completedPercentage: percentage,
+        updatedAt: new Date(),
+      })
+      .where(eq(assessments.id, id))
+      .returning();
+    return updated;
   }
 
   async deleteAssessment(id: number): Promise<boolean> {
-    return this.assessments.delete(id);
+    try {
+      // Delete related data first (foreign key constraints)
+      await db.delete(controlResponses).where(eq(controlResponses.assessmentId, id));
+      await db.delete(activityLogs).where(eq(activityLogs.assessmentId, id));
+      await db.delete(scopingDecisions).where(eq(scopingDecisions.assessmentId, id));
+      
+      // Then delete the assessment
+      const result = await db.delete(assessments).where(eq(assessments.id, id)).returning();
+      return result.length > 0;
+    } catch (error) {
+      console.error('Error deleting assessment:', error);
+      return false;
+    }
   }
 
-  // Control response methods
   async getControlResponses(assessmentId: number): Promise<ControlResponse[]> {
-    return Array.from(this.controlResponses.values()).filter(
-      (response) => response.assessmentId === assessmentId
-    );
+    return await db
+      .select()
+      .from(controlResponses)
+      .where(eq(controlResponses.assessmentId, assessmentId));
   }
 
   async getControlResponse(assessmentId: number, controlId: string): Promise<ControlResponse | undefined> {
-    return Array.from(this.controlResponses.values()).find(
-      (response) => response.assessmentId === assessmentId && response.controlId === controlId
-    );
+    const [response] = await db
+      .select()
+      .from(controlResponses)
+      .where(
+        and(
+          eq(controlResponses.assessmentId, assessmentId),
+          eq(controlResponses.controlId, controlId)
+        )
+      );
+    return response;
   }
 
   async saveControlResponse(insertResponse: InsertControlResponse): Promise<ControlResponse> {
-    // Check if response already exists
+    // Check if a response already exists for this assessment/control
     const existingResponse = await this.getControlResponse(
       insertResponse.assessmentId,
       insertResponse.controlId
     );
 
     if (existingResponse) {
-      const updatedResponse: ControlResponse = {
-        ...existingResponse,
-        ...insertResponse,
-        updatedAt: new Date()
-      };
-      this.controlResponses.set(existingResponse.id, updatedResponse);
-      return updatedResponse;
+      // Update the existing response
+      const [updated] = await db
+        .update(controlResponses)
+        .set({
+          ...insertResponse,
+          updatedAt: new Date(),
+        })
+        .where(eq(controlResponses.id, existingResponse.id))
+        .returning();
+      return updated;
     }
 
-    // Create new response
-    const id = this.responseId++;
-    const response: ControlResponse = {
-      ...insertResponse,
-      id,
-      updatedAt: new Date(),
-      evidence: insertResponse.evidence || null,
-      notes: insertResponse.notes || null
-    };
-    this.controlResponses.set(id, response);
+    // Create a new response
+    const [response] = await db
+      .insert(controlResponses)
+      .values({
+        ...insertResponse,
+        updatedAt: new Date(),
+      })
+      .returning();
     return response;
   }
 
   async updateControlResponse(id: number, responseUpdate: Partial<InsertControlResponse>): Promise<ControlResponse | undefined> {
-    const response = this.controlResponses.get(id);
-    if (!response) return undefined;
-
-    const updatedResponse: ControlResponse = {
-      ...response,
-      ...responseUpdate,
-      updatedAt: new Date()
-    };
-    this.controlResponses.set(id, updatedResponse);
-    return updatedResponse;
+    const [updated] = await db
+      .update(controlResponses)
+      .set({
+        ...responseUpdate,
+        updatedAt: new Date(),
+      })
+      .where(eq(controlResponses.id, id))
+      .returning();
+    return updated;
   }
 
-  // Activity log methods
   async getActivityLogs(assessmentId: number, limit?: number): Promise<ActivityLog[]> {
-    const logs = Array.from(this.activityLogs.values())
-      .filter((log) => log.assessmentId === assessmentId)
-      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-
-    return limit ? logs.slice(0, limit) : logs;
+    const query = db
+      .select()
+      .from(activityLogs)
+      .where(eq(activityLogs.assessmentId, assessmentId))
+      .orderBy(desc(activityLogs.id));
+    
+    if (limit !== undefined) {
+      // Create new query with limit
+      return await query.limit(limit);
+    }
+    
+    return await query;
   }
 
   async addActivityLog(insertLog: InsertActivityLog): Promise<ActivityLog> {
-    const id = this.logId++;
-    const log: ActivityLog = {
-      ...insertLog,
-      id,
-      timestamp: new Date()
-    };
-    this.activityLogs.set(id, log);
+    const [log] = await db
+      .insert(activityLogs)
+      .values(insertLog)
+      .returning();
     return log;
   }
 
-  // Scoping decision methods
   async getScopingDecisions(assessmentId: number): Promise<ScopingDecision[]> {
-    return Array.from(this.scopingDecisions.values()).filter(
-      (decision) => decision.assessmentId === assessmentId
-    );
+    return await db
+      .select()
+      .from(scopingDecisions)
+      .where(eq(scopingDecisions.assessmentId, assessmentId));
   }
 
   async saveScopingDecision(insertDecision: InsertScopingDecision): Promise<ScopingDecision> {
-    // Check if decision already exists
-    const existingDecision = Array.from(this.scopingDecisions.values()).find(
-      (decision) => decision.assessmentId === insertDecision.assessmentId && decision.controlId === insertDecision.controlId
-    );
+    // Check if a decision already exists for this assessment/control
+    const [existingDecision] = await db
+      .select()
+      .from(scopingDecisions)
+      .where(
+        and(
+          eq(scopingDecisions.assessmentId, insertDecision.assessmentId),
+          eq(scopingDecisions.controlId, insertDecision.controlId)
+        )
+      );
 
     if (existingDecision) {
-      const updatedDecision: ScopingDecision = {
-        ...existingDecision,
-        ...insertDecision
-      };
-      this.scopingDecisions.set(existingDecision.id, updatedDecision);
-      return updatedDecision;
+      // Update the existing decision
+      const [updated] = await db
+        .update(scopingDecisions)
+        .set(insertDecision)
+        .where(eq(scopingDecisions.id, existingDecision.id))
+        .returning();
+      return updated;
     }
 
-    // Create new decision
-    const id = this.scopingId++;
-    const decision: ScopingDecision = {
-      ...insertDecision,
-      id,
-      reason: insertDecision.reason || null
-    };
-    this.scopingDecisions.set(id, decision);
+    // Create a new decision
+    const [decision] = await db
+      .insert(scopingDecisions)
+      .values(insertDecision)
+      .returning();
     return decision;
   }
 
   async updateScopingDecision(id: number, decisionUpdate: Partial<InsertScopingDecision>): Promise<ScopingDecision | undefined> {
-    const decision = this.scopingDecisions.get(id);
-    if (!decision) return undefined;
-
-    const updatedDecision: ScopingDecision = {
-      ...decision,
-      ...decisionUpdate,
-      reason: decisionUpdate.reason || decision.reason
-    };
-    this.scopingDecisions.set(id, updatedDecision);
-    return updatedDecision;
+    const [updated] = await db
+      .update(scopingDecisions)
+      .set(decisionUpdate)
+      .where(eq(scopingDecisions.id, id))
+      .returning();
+    return updated;
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();
