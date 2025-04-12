@@ -63,7 +63,7 @@ const TopNavigation = ({ setSidebarOpen, currentPath }: TopNavigationProps) => {
               <ol className="flex text-sm leading-6 text-slate-500">
                 <li className="flex items-center">
                   <Link href="/">
-                    <a className="hover:text-primary">Home</a>
+                    <div className="hover:text-primary cursor-pointer">Home</div>
                   </Link>
                   <svg className="h-3 w-3 mx-2 text-slate-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />

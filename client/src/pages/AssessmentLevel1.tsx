@@ -9,19 +9,20 @@ import { Skeleton } from "@/components/ui/skeleton";
 import DomainAccordion from "@/components/DomainAccordion";
 import ProgressSummary from "@/components/ProgressSummary";
 import { cmmcLevel1Controls } from "@/data/cmmc-data";
+import type { Assessment, ControlResponse, ScopingDecision } from "@shared/schema";
 
 const AssessmentLevel1 = () => {
   const [activeTab, setActiveTab] = useState<string>("assessment");
 
-  const { data: assessment, isLoading: isLoadingAssessment } = useQuery({
+  const { data: assessment, isLoading: isLoadingAssessment } = useQuery<Assessment>({
     queryKey: ["/api/assessments/1"],
   });
 
-  const { data: responses, isLoading: isLoadingResponses } = useQuery({
+  const { data: responses, isLoading: isLoadingResponses } = useQuery<ControlResponse[]>({
     queryKey: ["/api/assessments/1/responses"],
   });
 
-  const { data: scopingDecisions, isLoading: isLoadingScopingDecisions } = useQuery({
+  const { data: scopingDecisions, isLoading: isLoadingScopingDecisions } = useQuery<ScopingDecision[]>({
     queryKey: ["/api/assessments/1/scoping"],
   });
 
@@ -177,8 +178,20 @@ const AssessmentLevel1 = () => {
       )}
 
       <div className="mt-8 flex justify-end space-x-4">
-        <Button variant="outline">Save Progress</Button>
-        <Button>Export Assessment</Button>
+        <Button 
+          variant="outline" 
+          onClick={() => {
+            queryClient.invalidateQueries({ queryKey: ["/api/assessments/1"] });
+            queryClient.invalidateQueries({ queryKey: ["/api/assessments"] });
+          }}
+        >
+          Save Progress
+        </Button>
+        <Button onClick={() => {
+          window.location.href = "/reports";
+        }}>
+          Export Assessment
+        </Button>
       </div>
     </>
   );
