@@ -33,11 +33,18 @@ const SprsScoreCard = ({ assessmentId, isLoading }: SprsScoreCardProps) => {
   
   const isLoadingAll = isLoading || isLoadingSprs;
 
-  // Determine progress bar color based on implementation percentage
-  const getProgressColor = (percentage: number) => {
-    if (percentage >= 80) return "bg-green-500";
-    if (percentage >= 60) return "bg-yellow-500";
+  // Determine progress bar color based on score rather than percentage
+  const getProgressColor = (score: number) => {
+    if (score >= 80) return "bg-green-500";
+    if (score >= 60) return "bg-yellow-500";
     return "bg-red-500";
+  };
+
+  // Calculate progress percentage for visualization (normalize from -203 to 110 range)
+  const calculateProgressPercentage = (score: number) => {
+    const totalRange = 313; // 110 - (-203)
+    const normalizedScore = score + 203; // Shift range to 0-313
+    return Math.round((normalizedScore / totalRange) * 100);
   };
 
   if (isLoadingAll || !data) {
@@ -61,6 +68,8 @@ const SprsScoreCard = ({ assessmentId, isLoading }: SprsScoreCardProps) => {
     );
   }
 
+  const progressPercentage = calculateProgressPercentage(data.sprsScore);
+
   return (
     <Card className="mb-6">
       <CardHeader className="pb-2">
@@ -71,7 +80,7 @@ const SprsScoreCard = ({ assessmentId, isLoading }: SprsScoreCardProps) => {
           <div className="flex justify-between items-center">
             <div>
               <span className="text-xl font-bold">{data.sprsScore}</span>
-              <span className="text-slate-500 text-sm ml-1">/ 110</span>
+              <span className="text-slate-500 text-sm ml-1">(-203 to 110)</span>
             </div>
             <div className="text-right">
               <span className="text-sm font-medium">Implementation Factor: </span>
@@ -81,13 +90,13 @@ const SprsScoreCard = ({ assessmentId, isLoading }: SprsScoreCardProps) => {
           
           <div>
             <Progress 
-              value={data.implementationPercentage} 
-              className={`h-2 ${getProgressColor(data.implementationPercentage)}`} 
+              value={progressPercentage} 
+              className={`h-2 ${getProgressColor(data.sprsScore)}`} 
             />
             <div className="flex justify-between mt-1">
-              <span className="text-xs text-slate-500">0%</span>
-              <span className="text-xs font-medium">{data.implementationPercentage}%</span>
-              <span className="text-xs text-slate-500">100%</span>
+              <span className="text-xs text-slate-500">-203</span>
+              <span className="text-xs font-medium">Score: {data.sprsScore}</span>
+              <span className="text-xs text-slate-500">110</span>
             </div>
           </div>
 
@@ -134,10 +143,13 @@ const SprsScoreCard = ({ assessmentId, isLoading }: SprsScoreCardProps) => {
           </div>
           
           <div className="text-xs text-slate-500 italic mt-2 space-y-1">
-            <p>The SPRS score starts at 110 and deducts:</p>
+            <p>SPRS Score Calculation:</p>
             <ul className="list-disc list-inside ml-2">
-              <li>1 point for each non-compliant or not assessed control</li>
-              <li>0.5 points for each partially compliant control</li>
+              <li>Starting score: 110 points</li>
+              <li>Each control has a DoD weight value (1-5 points)</li>
+              <li>Non-compliant or not assessed: -{`>`} Deduct full weight</li>
+              <li>Partially compliant: -{`>`} Deduct half weight</li>
+              <li>Score can range from -203 to 110</li>
             </ul>
             <p>Out-of-scope practices are excluded from the calculation.</p>
           </div>

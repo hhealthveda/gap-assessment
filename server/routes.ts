@@ -9,6 +9,8 @@ import {
 } from "@shared/schema";
 import { ZodError } from "zod";
 import { fromZodError } from "zod-validation-error";
+import { generateCsvReport, generateExcelReport, generatePdfReport } from "./reportGenerator";
+import { calculateSprsScore } from "../client/src/lib/sprsCalculator";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // API routes for assessments
@@ -203,9 +205,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/assessments/:assessmentId/scoping", async (req: Request, res: Response) => {
     try {
       const assessmentId = Number(req.params.assessmentId);
+      
+      // Verify assessment exists first
+      const assessment = await storage.getAssessment(assessmentId);
+      if (!assessment) {
+        return res.status(404).json({ message: "Assessment not found" });
+      }
+      
       const decisions = await storage.getScopingDecisions(assessmentId);
-      res.json(decisions);
+      // Return empty array instead of throwing if no decisions found
+      res.json(decisions || []);
     } catch (error) {
+      console.error('Error fetching scoping decisions:', error);
       res.status(500).json({ message: "Failed to fetch scoping decisions" });
     }
   });
@@ -320,106 +331,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get all scoping decisions
       const scopingDecisions = await storage.getScopingDecisions(assessmentId);
       
-      // Count totals for SPRS calculation
-      const totalControls = 110; // Level 2 has 110 practices
+      // Use the sprsCalculator to get the score with proper DOD weights
+      const sprsData = calculateSprsScore(responses, scopingDecisions);
       
-      // Create a map of scoping decisions by controlId for quick lookup
-      const scopingMap = new Map();
-      scopingDecisions.forEach(decision => {
-        scopingMap.set(decision.controlId, decision);
-      });
-      
-      // Initialize counters and arrays
-      let inScopeControls = 0;
-      let compliantControls = 0;
-      let partialControls = 0;
-      let nonCompliantControls = 0;
-      let notAssessedControls = 0;
-      
-      // Process responses based on DoD SPRS calculation methodology
-      // For controls not answered, consider them non-compliant
-      const controlIds = new Set();
-      
-      // Count responses by status
-      responses.forEach(response => {
-        controlIds.add(response.controlId);
-        
-        // Check if control is in scope
-        const scopingDecision = scopingMap.get(response.controlId);
-        const isInScope = !scopingDecision || scopingDecision.applicable !== false;
-        
-        if (isInScope) {
-          inScopeControls++;
-          
-          // Count by status
-          if (response.status === "yes") {
-            compliantControls++;
-          } else if (response.status === "partial") {
-            partialControls++;
-          } else if (response.status === "no") {
-            nonCompliantControls++;
-          }
-        }
-      });
-      
-      // Calculate controls not yet assessed (only in-scope)
-      const outOfScopeCount = scopingDecisions.filter(d => !d.applicable).length;
-      notAssessedControls = totalControls - outOfScopeCount - controlIds.size;
-      if (notAssessedControls < 0) notAssessedControls = 0;
-      
-      // Include not-assessed controls in the non-compliant category for SPRS calculation
-      const totalNonCompliant = nonCompliantControls + notAssessedControls;
-      
-      // SPRS score is based on subtracting from full compliance (110 points)
-      // Non-compliant controls = -1 point each
-      // Partially compliant controls = -0.5 points each
-      const deductions = totalNonCompliant + (partialControls * 0.5);
-      const sprsScore = Math.max(0, Math.round(totalControls - deductions));
-      
-      // Calculate implementation percentage based on assessed controls
-      const implementationPercentage = inScopeControls > 0 
-        ? Math.round((sprsScore / inScopeControls) * 100)
-        : 0;
-      
-      // Determine implementation level and factor according to DoD guidelines
-      let implementationLevel = "Not Scored (0 practices)";
-      if (sprsScore >= 110) implementationLevel = "Level 2 (110 practices)";
-      else if (sprsScore >= 100) implementationLevel = "Level 2 (100-109 practices)";
-      else if (sprsScore >= 80) implementationLevel = "Level 2 (80-99 practices)";
-      else if (sprsScore >= 60) implementationLevel = "Level 1 (60-79 practices)";
-      else if (sprsScore >= 1) implementationLevel = "Level 1 (1-59 practices)";
-      
-      let implementationFactor = "0.0";
-      if (implementationPercentage >= 100) implementationFactor = "1.0";
-      else if (implementationPercentage >= 95) implementationFactor = "0.95";
-      else if (implementationPercentage >= 90) implementationFactor = "0.9";
-      else if (implementationPercentage >= 85) implementationFactor = "0.85";
-      else if (implementationPercentage >= 80) implementationFactor = "0.8";
-      else if (implementationPercentage >= 75) implementationFactor = "0.75";
-      else if (implementationPercentage >= 70) implementationFactor = "0.7";
-      else if (implementationPercentage >= 65) implementationFactor = "0.65";
-      else if (implementationPercentage >= 60) implementationFactor = "0.6";
-      else if (implementationPercentage >= 50) implementationFactor = "0.5";
-      else if (implementationPercentage >= 40) implementationFactor = "0.4";
-      else if (implementationPercentage >= 30) implementationFactor = "0.3";
-      else if (implementationPercentage >= 20) implementationFactor = "0.2";
-      else if (implementationPercentage >= 10) implementationFactor = "0.1";
-      
-      res.json({
-        sprsScore,
-        totalControls,
-        inScopeControls,
-        compliantControls,
-        partialControls,
-        nonCompliantControls,
-        notAssessedControls,
-        totalNonCompliant,
-        implementationPercentage,
-        implementationLevel,
-        implementationFactor
-      });
+      res.json(sprsData);
     } catch (error) {
+      console.error('Error calculating SPRS score:', error);
       res.status(500).json({ message: "Failed to calculate SPRS score" });
+    }
+  });
+
+  // Report generation endpoint
+  app.post("/api/assessments/:assessmentId/generate-report", async (req: Request, res: Response) => {
+    try {
+      const assessmentId = Number(req.params.assessmentId);
+      const { format } = req.body;
+
+      // Get all necessary data
+      const assessment = await storage.getAssessment(assessmentId);
+      if (!assessment) {
+        return res.status(404).json({ message: "Assessment not found" });
+      }
+
+      const responses = await storage.getControlResponses(assessmentId);
+      const scopingDecisions = await storage.getScopingDecisions(assessmentId);
+      
+      // Calculate SPRS score for Level 2
+      let sprsScore = null;
+      if (assessment.level === "level2") {
+        sprsScore = calculateSprsScore(responses, scopingDecisions);
+      }
+
+      // Generate report based on format
+      let reportContent;
+      const timestamp = new Date().toISOString().split('T')[0];
+      
+      switch (format) {
+        case 'csv':
+          reportContent = generateCsvReport(assessment, responses, scopingDecisions, sprsScore);
+          res.setHeader('Content-Type', 'text/csv');
+          res.setHeader('Content-Disposition', `attachment; filename=cmmc-assessment-${timestamp}.csv`);
+          break;
+          
+        case 'excel':
+          reportContent = await generateExcelReport(assessment, responses, scopingDecisions, sprsScore);
+          res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+          res.setHeader('Content-Disposition', `attachment; filename=cmmc-assessment-${timestamp}.xlsx`);
+          break;
+          
+        case 'pdf':
+        default:
+          reportContent = await generatePdfReport(assessment, responses, scopingDecisions, sprsScore);
+          res.setHeader('Content-Type', 'application/pdf');
+          res.setHeader('Content-Disposition', `attachment; filename=cmmc-assessment-${timestamp}.pdf`);
+          break;
+      }
+      
+      res.send(reportContent);
+    } catch (error) {
+      console.error('Error generating report:', error);
+      res.status(500).json({ message: "Failed to generate report" });
     }
   });
 

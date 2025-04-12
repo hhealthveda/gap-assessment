@@ -25,6 +25,7 @@ const Reports = () => {
   const { toast } = useToast();
   const [selectedLevel, setSelectedLevel] = useState("level1");
   const [selectedFormat, setSelectedFormat] = useState("pdf");
+  const [isGenerating, setIsGenerating] = useState(false);
   const assessmentId = selectedLevel === "level1" ? 1 : 2;
 
   const { data: assessment, isLoading: isLoadingAssessment } = useQuery<Assessment>({
@@ -35,24 +36,79 @@ const Reports = () => {
     queryKey: [`/api/assessments/${assessmentId}/calculate-completion`],
   });
 
-  const isLoading = isLoadingAssessment || isLoadingStats;
-  
-  const handleExportReport = () => {
+  const { data: sprsData, isLoading: isLoadingSprs } = useQuery({
+    queryKey: [`/api/assessments/${assessmentId}/sprs-score`],
+    enabled: selectedLevel === "level2",
+  });
+
+  const isLoading = isLoadingAssessment || isLoadingStats || (selectedLevel === "level2" && isLoadingSprs);
+
+  const handleExportReport = async () => {
+    setIsGenerating(true);
     toast({
       title: "Export Started",
       description: `Your ${selectedLevel === "level1" ? "Level 1" : "Level 2"} report is being generated as a ${selectedFormat.toUpperCase()} file.`,
     });
-    
-    // In a production app, this would make an API call to generate the report
-    setTimeout(() => {
+
+    try {
+      const reportData = {
+        assessment,
+        stats,
+        sprsScore: selectedLevel === "level2" ? sprsData : null,
+        format: selectedFormat,
+        generatedAt: new Date().toISOString(),
+      };
+
+      const response = await fetch(`/api/assessments/${assessmentId}/generate-report`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(reportData),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to generate report");
+      }
+
+      if (selectedFormat !== "csv") {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `cmmc-${selectedLevel}-assessment-report.${selectedFormat}`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      } else {
+        const csv = await response.text();
+        const blob = new Blob([csv], { type: "text/csv" });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `cmmc-${selectedLevel}-assessment-data.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      }
+
       toast({
         title: "Export Complete",
         description: `Your ${selectedLevel === "level1" ? "Level 1" : "Level 2"} report has been downloaded.`,
       });
-    }, 2000);
+    } catch (error) {
+      toast({
+        title: "Export Failed",
+        description: "There was an error generating your report. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
-  // Mock data for domain compliance
   const domainComplianceData = [
     { name: "Access Control", compliance: 85, color: "#22c55e" },
     { name: "Identification & Authentication", compliance: 92, color: "#22c55e" },
@@ -72,10 +128,7 @@ const Reports = () => {
           </p>
         </div>
         <div className="mt-4 sm:mt-0 flex items-center space-x-4">
-          <Select
-            value={selectedFormat}
-            onValueChange={setSelectedFormat}
-          >
+          <Select value={selectedFormat} onValueChange={setSelectedFormat}>
             <SelectTrigger className="w-[120px]">
               <SelectValue placeholder="Format" />
             </SelectTrigger>
@@ -87,19 +140,18 @@ const Reports = () => {
           </Select>
           <Button className="whitespace-nowrap" onClick={handleExportReport}>
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
+              <path
+                fillRule="evenodd"
+                d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z"
+                clipRule="evenodd"
+              />
             </svg>
             Export Report
           </Button>
         </div>
       </div>
 
-      <Tabs
-        defaultValue="level1"
-        value={selectedLevel}
-        onValueChange={setSelectedLevel}
-        className="mb-8"
-      >
+      <Tabs defaultValue="level1" value={selectedLevel} onValueChange={setSelectedLevel} className="mb-8">
         <TabsList>
           <TabsTrigger value="level1">CMMC Level 1</TabsTrigger>
           <TabsTrigger value="level2">CMMC Level 2</TabsTrigger>
@@ -126,7 +178,6 @@ const Reports = () => {
         </TabsContent>
       </Tabs>
 
-      {/* Report Preview */}
       <Card className="mb-8">
         <CardContent className="p-0">
           <div className="px-4 py-5 sm:px-6 border-b border-slate-200">
@@ -140,12 +191,18 @@ const Reports = () => {
               ) : (
                 <div className="bg-slate-50 p-4 rounded-lg">
                   <p className="text-sm text-slate-700 mb-2">
-                    This report presents the results of a CMMC {selectedLevel === "level1" ? "Level 1" : "Level 2"} gap assessment 
-                    conducted for {assessment?.organizationName || "your organization"}.
+                    This report presents the results of a CMMC {selectedLevel === "level1" ? "Level 1" : "Level 2"} gap
+                    assessment conducted for {assessment?.organizationName || "your organization"}.
                   </p>
                   <p className="text-sm text-slate-700 mb-2">
                     Overall compliance: <span className="font-medium">{stats?.complianceScore || 0}%</span>
                   </p>
+                  {selectedLevel === "level2" && sprsData && (
+                    <p className="text-sm text-slate-700 mb-2">
+                      SPRS Score: <span className="font-medium">{sprsData.sprsScore}</span> (Implementation Factor:{" "}
+                      {sprsData.implementationFactor})
+                    </p>
+                  )}
                   <p className="text-sm text-slate-700">
                     Assessment completion: <span className="font-medium">{assessment?.completedPercentage || 0}%</span>
                   </p>
@@ -158,19 +215,19 @@ const Reports = () => {
               <div className="bg-white p-4 rounded-lg border border-slate-200">
                 <ResponsiveContainer width="100%" height={300}>
                   <BarChart data={domainComplianceData} margin={{ top: 20, right: 30, left: 20, bottom: 70 }}>
-                    <XAxis 
-                      dataKey="name" 
+                    <XAxis
+                      dataKey="name"
                       tick={{ fontSize: 12 }}
                       angle={-45}
                       textAnchor="end"
                       height={70}
                     />
-                    <YAxis 
+                    <YAxis
                       tick={{ fontSize: 12 }}
                       domain={[0, 100]}
                       tickFormatter={(value) => `${value}%`}
                     />
-                    <Tooltip 
+                    <Tooltip
                       formatter={(value) => [`${value}%`, "Compliance"]}
                       labelStyle={{ fontWeight: "bold" }}
                     />
@@ -209,18 +266,22 @@ const Reports = () => {
                 </div>
               </div>
             </div>
+
+            <div className="mt-8 flex justify-end">
+              <Button onClick={handleExportReport} disabled={isGenerating}>
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                  <path
+                    fillRule="evenodd"
+                    d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+                {isGenerating ? "Generating..." : "Generate Full Report"}
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
-
-      <div className="mt-8 flex justify-end">
-        <Button onClick={handleExportReport}>
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" viewBox="0 0 20 20" fill="currentColor">
-            <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
-          </svg>
-          Generate Full Report
-        </Button>
-      </div>
     </>
   );
 };
