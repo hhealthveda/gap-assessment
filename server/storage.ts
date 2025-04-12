@@ -247,7 +247,8 @@ export class MemStorage implements IStorage {
     const id = this.scopingId++;
     const decision: ScopingDecision = {
       ...insertDecision,
-      id
+      id,
+      reason: insertDecision.reason || null
     };
     this.scopingDecisions.set(id, decision);
     return decision;
@@ -259,7 +260,8 @@ export class MemStorage implements IStorage {
 
     const updatedDecision: ScopingDecision = {
       ...decision,
-      ...decisionUpdate
+      ...decisionUpdate,
+      reason: decisionUpdate.reason || decision.reason
     };
     this.scopingDecisions.set(id, updatedDecision);
     return updatedDecision;

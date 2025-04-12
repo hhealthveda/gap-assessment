@@ -25,14 +25,14 @@ const Sidebar = ({ open, setOpen, currentPath }: SidebarProps) => {
       <div className="flex flex-col flex-grow px-4 py-5 overflow-y-auto">
         <div className="space-y-1">
           <Link href="/">
-            <a className={`flex items-center px-2 py-2 text-sm font-medium rounded-md ${
+            <div className={`flex items-center px-2 py-2 text-sm font-medium rounded-md cursor-pointer ${
               isActive("/") 
                 ? "bg-primary bg-opacity-10 text-primary" 
                 : "text-slate-700 hover:bg-slate-100"
             }`}>
               <Home className="h-5 w-5 mr-2" />
               Dashboard
-            </a>
+            </div>
           </Link>
           
           <Collapsible open={level1Open} onOpenChange={setLevel1Open}>
@@ -47,22 +47,22 @@ const Sidebar = ({ open, setOpen, currentPath }: SidebarProps) => {
             </CollapsibleTrigger>
             <CollapsibleContent className="pl-8 mt-1 space-y-1">
               <Link href="/assessment/level1">
-                <a className={`block px-2 py-1 text-sm font-medium rounded-md ${
+                <div className={`block px-2 py-1 text-sm font-medium rounded-md cursor-pointer ${
                   isActive("/assessment/level1") 
                     ? "text-primary" 
                     : "text-slate-700 hover:bg-slate-100"
                 }`}>
                   Assessment Progress
-                </a>
+                </div>
               </Link>
               <Link href="/gap-analysis">
-                <a className={`block px-2 py-1 text-sm font-medium rounded-md ${
+                <div className={`block px-2 py-1 text-sm font-medium rounded-md cursor-pointer ${
                   isActive("/gap-analysis") && level1Open
                     ? "text-primary" 
                     : "text-slate-700 hover:bg-slate-100"
                 }`}>
                   Gap Analysis
-                </a>
+                </div>
               </Link>
             </CollapsibleContent>
           </Collapsible>
@@ -79,46 +79,46 @@ const Sidebar = ({ open, setOpen, currentPath }: SidebarProps) => {
             </CollapsibleTrigger>
             <CollapsibleContent className="pl-8 mt-1 space-y-1">
               <Link href="/assessment/level2">
-                <a className={`block px-2 py-1 text-sm font-medium rounded-md ${
+                <div className={`block px-2 py-1 text-sm font-medium rounded-md cursor-pointer ${
                   isActive("/assessment/level2") 
                     ? "text-primary" 
                     : "text-slate-700 hover:bg-slate-100"
                 }`}>
                   Assessment Progress
-                </a>
+                </div>
               </Link>
               <Link href="/gap-analysis">
-                <a className={`block px-2 py-1 text-sm font-medium rounded-md ${
+                <div className={`block px-2 py-1 text-sm font-medium rounded-md cursor-pointer ${
                   isActive("/gap-analysis") && level2Open
                     ? "text-primary" 
                     : "text-slate-700 hover:bg-slate-100"
                 }`}>
                   Gap Analysis
-                </a>
+                </div>
               </Link>
             </CollapsibleContent>
           </Collapsible>
           
           <Link href="/reports">
-            <a className={`flex items-center px-2 py-2 text-sm font-medium rounded-md ${
+            <div className={`flex items-center px-2 py-2 text-sm font-medium rounded-md cursor-pointer ${
               isActive("/reports") 
                 ? "bg-primary bg-opacity-10 text-primary" 
                 : "text-slate-700 hover:bg-slate-100"
             }`}>
               <FileText className="h-5 w-5 mr-2" />
               Reports
-            </a>
+            </div>
           </Link>
           
           <Link href="/settings">
-            <a className={`flex items-center px-2 py-2 text-sm font-medium rounded-md ${
+            <div className={`flex items-center px-2 py-2 text-sm font-medium rounded-md cursor-pointer ${
               isActive("/settings") 
                 ? "bg-primary bg-opacity-10 text-primary" 
                 : "text-slate-700 hover:bg-slate-100"
             }`}>
               <Settings className="h-5 w-5 mr-2" />
               Settings
-            </a>
+            </div>
           </Link>
         </div>
       </div>

@@ -7,6 +7,19 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Cell } from "recharts";
 import { useToast } from "@/hooks/use-toast";
+import type { Assessment } from "@shared/schema";
+
+interface CompletionStats {
+  totalControls: number;
+  assessedControls: number;
+  applicableControls: number;
+  answeredControls: number;
+  compliantControls: number;
+  partialControls: number;
+  nonCompliantControls: number;
+  complianceScore: number;
+  completionPercentage: number;
+}
 
 const Reports = () => {
   const { toast } = useToast();
@@ -14,11 +27,11 @@ const Reports = () => {
   const [selectedFormat, setSelectedFormat] = useState("pdf");
   const assessmentId = selectedLevel === "level1" ? 1 : 2;
 
-  const { data: assessment, isLoading: isLoadingAssessment } = useQuery({
+  const { data: assessment, isLoading: isLoadingAssessment } = useQuery<Assessment>({
     queryKey: [`/api/assessments/${assessmentId}`],
   });
 
-  const { data: stats, isLoading: isLoadingStats } = useQuery({
+  const { data: stats, isLoading: isLoadingStats } = useQuery<CompletionStats>({
     queryKey: [`/api/assessments/${assessmentId}/calculate-completion`],
   });
 
