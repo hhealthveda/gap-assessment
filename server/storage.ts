@@ -67,6 +67,11 @@ export class MemStorage implements IStorage {
       level: "level1",
       organizationName: "Acme Inc."
     });
+    this.createAssessment({
+      name: "CMMC Level 2 Assessment",
+      level: "level2",
+      organizationName: "Acme Inc."
+    });
   }
 
   // User methods
@@ -175,7 +180,9 @@ export class MemStorage implements IStorage {
     const response: ControlResponse = {
       ...insertResponse,
       id,
-      updatedAt: new Date()
+      updatedAt: new Date(),
+      evidence: insertResponse.evidence || null,
+      notes: insertResponse.notes || null
     };
     this.controlResponses.set(id, response);
     return response;

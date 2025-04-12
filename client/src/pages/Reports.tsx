@@ -6,8 +6,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Cell } from "recharts";
+import { useToast } from "@/hooks/use-toast";
 
 const Reports = () => {
+  const { toast } = useToast();
   const [selectedLevel, setSelectedLevel] = useState("level1");
   const [selectedFormat, setSelectedFormat] = useState("pdf");
   const assessmentId = selectedLevel === "level1" ? 1 : 2;
@@ -21,6 +23,21 @@ const Reports = () => {
   });
 
   const isLoading = isLoadingAssessment || isLoadingStats;
+  
+  const handleExportReport = () => {
+    toast({
+      title: "Export Started",
+      description: `Your ${selectedLevel === "level1" ? "Level 1" : "Level 2"} report is being generated as a ${selectedFormat.toUpperCase()} file.`,
+    });
+    
+    // In a production app, this would make an API call to generate the report
+    setTimeout(() => {
+      toast({
+        title: "Export Complete",
+        description: `Your ${selectedLevel === "level1" ? "Level 1" : "Level 2"} report has been downloaded.`,
+      });
+    }, 2000);
+  };
 
   // Mock data for domain compliance
   const domainComplianceData = [
@@ -55,7 +72,7 @@ const Reports = () => {
               <SelectItem value="excel">Excel Export</SelectItem>
             </SelectContent>
           </Select>
-          <Button className="whitespace-nowrap">
+          <Button className="whitespace-nowrap" onClick={handleExportReport}>
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" viewBox="0 0 20 20" fill="currentColor">
               <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
             </svg>
@@ -184,7 +201,7 @@ const Reports = () => {
       </Card>
 
       <div className="mt-8 flex justify-end">
-        <Button>
+        <Button onClick={handleExportReport}>
           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" viewBox="0 0 20 20" fill="currentColor">
             <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
           </svg>
