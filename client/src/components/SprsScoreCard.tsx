@@ -11,6 +11,8 @@ interface SprsScoreData {
   compliantControls: number;
   partialControls: number;
   nonCompliantControls: number;
+  notAssessedControls: number;
+  totalNonCompliant: number;
   implementationPercentage: number;
   implementationLevel: string;
   implementationFactor: string;
@@ -96,7 +98,7 @@ const SprsScoreCard = ({ assessmentId, isLoading }: SprsScoreCardProps) => {
             </p>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
             <div className="bg-green-50 rounded-md p-3 text-center">
               <div className="text-green-600 font-bold text-xl">
                 {data.compliantControls}
@@ -121,11 +123,23 @@ const SprsScoreCard = ({ assessmentId, isLoading }: SprsScoreCardProps) => {
                 Non-Compliant
               </div>
             </div>
+            <div className="bg-slate-50 rounded-md p-3 text-center">
+              <div className="text-slate-600 font-bold text-xl">
+                {data.notAssessedControls}
+              </div>
+              <div className="text-slate-800 text-sm">
+                Not Assessed
+              </div>
+            </div>
           </div>
           
-          <div className="text-xs text-slate-500 italic mt-2">
-            Note: SPRS score is calculated based on in-scope practices only. 
-            Out-of-scope practices are excluded from the calculation.
+          <div className="text-xs text-slate-500 italic mt-2 space-y-1">
+            <p>The SPRS score starts at 110 and deducts:</p>
+            <ul className="list-disc list-inside ml-2">
+              <li>1 point for each non-compliant or not assessed control</li>
+              <li>0.5 points for each partially compliant control</li>
+            </ul>
+            <p>Out-of-scope practices are excluded from the calculation.</p>
           </div>
         </div>
       </CardContent>

@@ -25,55 +25,76 @@ export function calculateSprsScore(
     scopingMap.set(decision.controlId, decision);
   });
 
-  // Initialize counters
-  let totalControlsInScope = 0;
-  let totalScore = 0;
+  // Initialize counters and arrays
+  const totalControls = MAX_SPRS_SCORE; // 110 practices in CMMC Level 2
+  let inScopeControls = 0;
   let compliantControls = 0;
   let partialControls = 0;
   let nonCompliantControls = 0;
+  let notAssessedControls = 0;
+
+  // Track which controls have been assessed
+  const controlIds = new Set<string>();
   
   // Process each response
   responses.forEach(response => {
+    controlIds.add(response.controlId);
+    
     // Check if the control is in scope
     const scopingDecision = scopingMap.get(response.controlId);
     const isInScope = !scopingDecision || scopingDecision.applicable !== false;
     
     // Only include in-scope controls in the calculation
     if (isInScope) {
-      totalControlsInScope++;
+      inScopeControls++;
       
-      // Calculate score based on status
+      // Count based on status
       switch (response.status) {
         case 'yes':
-          totalScore += WEIGHT_COMPLIANT;
           compliantControls++;
           break;
         case 'partial':
-          totalScore += WEIGHT_PARTIAL;
           partialControls++;
           break;
         case 'no':
-          totalScore += WEIGHT_NON_COMPLIANT;
           nonCompliantControls++;
           break;
-        // 'not_applicable' is handled by the scoping decisions and excluded from score
+        // 'not_applicable' is handled by the scoping decisions
       }
     }
   });
+
+  // Calculate controls not yet assessed (in-scope only)
+  const outOfScopeCount = scopingDecisions.filter(d => !d.applicable).length;
+  notAssessedControls = totalControls - outOfScopeCount - controlIds.size;
+  if (notAssessedControls < 0) notAssessedControls = 0;
   
-  // Calculate SPRS score as a percentage of maximum possible score
-  const sprsScore = totalControlsInScope > 0 
-    ? Math.round((totalScore / totalControlsInScope) * 100) 
+  // Include not-assessed controls in the non-compliant category for SPRS calculation
+  const totalNonCompliant = nonCompliantControls + notAssessedControls;
+  
+  // SPRS score calculation based on DoD methodology:
+  // Start with maximum score and deduct points
+  // Non-compliant controls = -1 point each
+  // Partially compliant controls = -0.5 points each
+  const deductions = totalNonCompliant + (partialControls * WEIGHT_PARTIAL);
+  const sprsScore = Math.max(0, Math.round(totalControls - deductions));
+  
+  // Calculate implementation percentage
+  const implementationPercentage = inScopeControls > 0 
+    ? Math.round((sprsScore / inScopeControls) * 100) 
     : 0;
     
   // Return the SPRS score and related metrics
   return {
     sprsScore,
-    totalControlsInScope,
+    totalControls,
+    inScopeControls,
     compliantControls,
     partialControls,
     nonCompliantControls,
-    implementationPercentage: Math.round((totalScore / totalControlsInScope) * 100) || 0
+    notAssessedControls,
+    totalNonCompliant,
+    implementationPercentage
   };
 }
 

@@ -322,26 +322,72 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Count totals for SPRS calculation
       const totalControls = 110; // Level 2 has 110 practices
-      const inScopeControls = totalControls - scopingDecisions.filter(d => !d.applicable).length;
       
-      // Count compliant, partial, and non-compliant controls
-      const compliantControls = responses.filter(r => r.status === "yes").length;
-      const partialControls = responses.filter(r => r.status === "partial").length;
-      const nonCompliantControls = responses.filter(r => r.status === "no").length;
+      // Create a map of scoping decisions by controlId for quick lookup
+      const scopingMap = new Map();
+      scopingDecisions.forEach(decision => {
+        scopingMap.set(decision.controlId, decision);
+      });
       
-      // Calculate raw score and implementation percentage
-      const rawScore = compliantControls + (partialControls * 0.5);
+      // Initialize counters and arrays
+      let inScopeControls = 0;
+      let compliantControls = 0;
+      let partialControls = 0;
+      let nonCompliantControls = 0;
+      let notAssessedControls = 0;
+      
+      // Process responses based on DoD SPRS calculation methodology
+      // For controls not answered, consider them non-compliant
+      const controlIds = new Set();
+      
+      // Count responses by status
+      responses.forEach(response => {
+        controlIds.add(response.controlId);
+        
+        // Check if control is in scope
+        const scopingDecision = scopingMap.get(response.controlId);
+        const isInScope = !scopingDecision || scopingDecision.applicable !== false;
+        
+        if (isInScope) {
+          inScopeControls++;
+          
+          // Count by status
+          if (response.status === "yes") {
+            compliantControls++;
+          } else if (response.status === "partial") {
+            partialControls++;
+          } else if (response.status === "no") {
+            nonCompliantControls++;
+          }
+        }
+      });
+      
+      // Calculate controls not yet assessed (only in-scope)
+      const outOfScopeCount = scopingDecisions.filter(d => !d.applicable).length;
+      notAssessedControls = totalControls - outOfScopeCount - controlIds.size;
+      if (notAssessedControls < 0) notAssessedControls = 0;
+      
+      // Include not-assessed controls in the non-compliant category for SPRS calculation
+      const totalNonCompliant = nonCompliantControls + notAssessedControls;
+      
+      // SPRS score is based on subtracting from full compliance (110 points)
+      // Non-compliant controls = -1 point each
+      // Partially compliant controls = -0.5 points each
+      const deductions = totalNonCompliant + (partialControls * 0.5);
+      const sprsScore = Math.max(0, Math.round(totalControls - deductions));
+      
+      // Calculate implementation percentage based on assessed controls
       const implementationPercentage = inScopeControls > 0 
-        ? Math.round((rawScore / inScopeControls) * 100)
+        ? Math.round((sprsScore / inScopeControls) * 100)
         : 0;
       
-      // Determine implementation level and factor
+      // Determine implementation level and factor according to DoD guidelines
       let implementationLevel = "Not Scored (0 practices)";
-      if (rawScore >= 110) implementationLevel = "Level 2 (110+ practices)";
-      else if (rawScore >= 100) implementationLevel = "Level 2 (100-109 practices)";
-      else if (rawScore >= 80) implementationLevel = "Level 2 (80-99 practices)";
-      else if (rawScore >= 60) implementationLevel = "Level 1 (60-79 practices)";
-      else if (rawScore >= 1) implementationLevel = "Level 1 (1-59 practices)";
+      if (sprsScore >= 110) implementationLevel = "Level 2 (110 practices)";
+      else if (sprsScore >= 100) implementationLevel = "Level 2 (100-109 practices)";
+      else if (sprsScore >= 80) implementationLevel = "Level 2 (80-99 practices)";
+      else if (sprsScore >= 60) implementationLevel = "Level 1 (60-79 practices)";
+      else if (sprsScore >= 1) implementationLevel = "Level 1 (1-59 practices)";
       
       let implementationFactor = "0.0";
       if (implementationPercentage >= 100) implementationFactor = "1.0";
@@ -360,12 +406,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       else if (implementationPercentage >= 10) implementationFactor = "0.1";
       
       res.json({
-        sprsScore: Math.round(rawScore),
+        sprsScore,
         totalControls,
         inScopeControls,
         compliantControls,
         partialControls,
         nonCompliantControls,
+        notAssessedControls,
+        totalNonCompliant,
         implementationPercentage,
         implementationLevel,
         implementationFactor
